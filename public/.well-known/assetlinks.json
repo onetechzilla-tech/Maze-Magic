@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "app.fungames.mazemagic",
-        "sha256_cert_fingerprints": ["86:C1:C9:5A:C3:89:71:3E:A2:85:CC:98:80:58:F2:D2:C6:17:B5:FB:BB:57:78:24:67:D2:91:DA:06:3A:A7:64"]
+        "package_name": "com.techzilla.mazemagic",
+        "sha256_cert_fingerprints": ["81:79:C1:62:72:BB:BA:67:E6:7A:A4:97:91:04:32:AF:12:2A:3D:7C:4A:31:B7:9A:94:C2:47:14:BE:C1:29:B5"]
       }
     }]
