@@ -1,0 +1,5 @@
+{
+  "name": "Maze Magic",
+  "description": "A strategic, turn-based, two-player maze game with a vibrant, magical theme. Players race to reach the opposite side of the board, placing glowing walls to block or outmaneuver their opponent. Features a human vs. human mode and a human vs. AI mode powered by Gemini.",
+  "requestFramePermissions": []
+}
