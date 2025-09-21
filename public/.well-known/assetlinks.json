@@ -1,11 +1,11 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "com.techzilla.mazemagic",
-        "sha256_cert_fingerprints": [
-		"0D:E8:E2:38:CA:83:0B:DF:E3:50:9D:DB:51:ED:26:5B:05:02:32:BB:06:46:5A:D2:3F:FA:07:EB:11:9F:76:2B",
-		"81:79:C1:62:72:BB:BA:67:E6:7A:A4:97:91:04:32:AF:12:2A:3D:7C:4A:31:B7:9A:94:C2:47:14:BE:C1:29:B5"
-		]
-      }
-    }]
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.techzilla.mazemagic",
+      "sha256_cert_fingerprints":
+        ["0D:E8:E2:38:CA:83:0B:DF:E3:50:9D:DB:51:ED:26:5B:05:02:32:BB:06:46:5A:D2:3F:FA:07:EB:11:9F:76:2B"]
+    }
+  }
+]
