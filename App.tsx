@@ -316,7 +316,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (showPrivacyModal) {
-            fetch('privacy_policy.html')
+            fetch('/privacy_policy.html')
                 .then(response => response.text())
                 .then(html => {
                     const parser = new DOMParser();

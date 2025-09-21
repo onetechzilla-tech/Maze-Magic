@@ -1,7 +1,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { BOARD_SIZE } from '../constants';
-import getAiMove from '../services/geminiService';
+// Removed static import: import getAiMove from '../services/geminiService';
 import getLocalAiMove from '../services/localAiService';
 import { onlineService } from '../services/onlineService';
 import { findShortestPath, getPossibleMoves } from '../utils/pathfinding';
@@ -492,6 +492,8 @@ const useGameLogic = () => {
             const checkWall = (wall: Wall) => isValidWallPlacement(wall, walls, players[1], players[2], 2) === true;
             aiAction = getLocalAiMove(players[2], players[1], walls, difficulty, checkWall);
         } else {
+            // Use a dynamic import to load the Gemini service only when needed.
+            const { default: getAiMove } = await import('../services/geminiService');
             aiAction = await getAiMove(players, 2, walls, difficulty);
         }
         

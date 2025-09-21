@@ -1,28 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  // By setting publicDir to false, we prevent Vite from using the 'public' directory by default.
-  // This gives us full control over asset handling with vite-plugin-static-copy.
-  publicDir: false,
+  // By removing `publicDir: false`, we re-enable Vite's default, reliable handling
+  // of the 'public' directory, which copies its contents to the build output root.
+  // This is the standard and recommended approach.
   plugins: [
     react(),
-    viteStaticCopy({
-      targets: [
-        // All static assets are now explicitly sourced from the 'public' directory
-        // to ensure they are correctly copied to the 'dist' folder during build.
-        { src: 'public/icons', dest: '' },
-        { src: 'public/sounds', dest: '' },
-        { src: 'public/splash.png', dest: '' },
-        { src: 'public/home-page-background.png', dest: '' },
-        { src: 'public/privacy_policy.html', dest: '' },
-        { src: 'public/manifest.json', dest: '' },
-        { src: 'public/service-worker.js', dest: '' },
-        { src: 'public/.well-known', dest: '' },
-      ]
-    })
+    // The vite-plugin-static-copy is no longer needed as Vite will handle the public directory automatically.
   ],
   define: {
     // This makes the process.env.API_KEY variable available in the client-side code.

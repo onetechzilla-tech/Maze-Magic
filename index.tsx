@@ -4,8 +4,8 @@ import App from './App';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Use a relative URL for the service worker to support deployments in subdirectories.
-    const swUrl = 'service-worker.js';
+    // Use an absolute URL for the service worker for root deployments.
+    const swUrl = '/service-worker.js';
     navigator.serviceWorker.register(swUrl)
       .then(registration => {
         console.log('ServiceWorker registration successful with scope: ', registration.scope);

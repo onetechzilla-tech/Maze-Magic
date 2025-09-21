@@ -19,26 +19,26 @@ export enum Sound {
   EmojiWaiting = 'emoji-waiting',
 }
 
-// Map sound enum to their corresponding file paths using relative paths to
-// ensure they work correctly in subdirectory deployments (e.g., GitHub Pages).
+// Map sound enum to their corresponding file paths using absolute paths to
+// ensure they work correctly in all deployment environments.
 const soundFiles: Record<Sound, string> = {
-  [Sound.UIClick]: 'sounds/ui-click.mp3',
-  [Sound.StartGame]: 'sounds/start-game.mp3',
-  [Sound.MovePawn]: 'sounds/move-pawn.mp3',
-  [Sound.PlaceWall]: 'sounds/place-wall.mp3',
-  [Sound.WinGame]: 'sounds/win-game.mp3',
-  [Sound.LoseGame]: 'sounds/lose-game.mp3',
-  [Sound.TimerTick]: 'sounds/timer-tick.mp3',
-  [Sound.Error]: 'sounds/error.mp3',
-  [Sound.OnlineWaiting]: 'sounds/online-waiting.mp3',
-  [Sound.EmojiLaugh]: 'sounds/emoji-laugh.mp3',
-  [Sound.EmojiThink]: 'sounds/emoji-think.mp3',
-  [Sound.EmojiMindBlown]: 'sounds/emoji-mind-blown.mp3',
-  [Sound.EmojiCool]: 'sounds/emoji-cool.mp3',
-  [Sound.EmojiWave]: 'sounds/emoji-wave.mp3',
-  [Sound.EmojiLove]: 'sounds/emoji-love.mp3',
-  [Sound.EmojiAngry]: 'sounds/emoji-angry.mp3',
-  [Sound.EmojiWaiting]: 'sounds/emoji-waiting.mp3',
+  [Sound.UIClick]: '/sounds/ui-click.mp3',
+  [Sound.StartGame]: '/sounds/start-game.mp3',
+  [Sound.MovePawn]: '/sounds/move-pawn.mp3',
+  [Sound.PlaceWall]: '/sounds/place-wall.mp3',
+  [Sound.WinGame]: '/sounds/win-game.mp3',
+  [Sound.LoseGame]: '/sounds/lose-game.mp3',
+  [Sound.TimerTick]: '/sounds/timer-tick.mp3',
+  [Sound.Error]: '/sounds/error.mp3',
+  [Sound.OnlineWaiting]: '/sounds/online-waiting.mp3',
+  [Sound.EmojiLaugh]: '/sounds/emoji-laugh.mp3',
+  [Sound.EmojiThink]: '/sounds/emoji-think.mp3',
+  [Sound.EmojiMindBlown]: '/sounds/emoji-mind-blown.mp3',
+  [Sound.EmojiCool]: '/sounds/emoji-cool.mp3',
+  [Sound.EmojiWave]: '/sounds/emoji-wave.mp3',
+  [Sound.EmojiLove]: '/sounds/emoji-love.mp3',
+  [Sound.EmojiAngry]: '/sounds/emoji-angry.mp3',
+  [Sound.EmojiWaiting]: '/sounds/emoji-waiting.mp3',
 };
 
 

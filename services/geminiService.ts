@@ -3,8 +3,20 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Difficulty } from '../types';
 import type { Player, Wall, AiAction } from '../types';
 
-// Per coding guidelines, initialize the AI client with an API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let ai: GoogleGenAI | null = null;
+
+// Lazily initialize the AI client to prevent app crash on load if API key is missing.
+const getAiClient = (): GoogleGenAI => {
+    if (!process.env.API_KEY) {
+        // This error will be caught by the game logic and shown to the user.
+        throw new Error("Gemini API key is not configured. Please contact the administrator.");
+    }
+    if (!ai) {
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
+    return ai;
+};
+
 
 const getAiMove = async (
   players: { [key: number]: Player },
@@ -77,7 +89,8 @@ const getAiMove = async (
     };
 
     try {
-        const response = await ai.models.generateContent({
+        const aiClient = getAiClient();
+        const response = await aiClient.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
             config: {
