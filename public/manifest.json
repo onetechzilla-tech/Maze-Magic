@@ -18,5 +18,10 @@
   "display": "standalone",
   "theme_color": "#1a0c3d",
   "background_color": "#0d061f",
-  "capture_links": "existing-client-navigate"
+  "capture_links": "existing-client-navigate",
+  "url_handlers": [
+    {
+      "origin": "https://onetechzilla-mazemagic.netlify.app"
+    }
+  ]
 }
