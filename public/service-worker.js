@@ -1,8 +1,8 @@
-const CACHE_NAME = 'gemini-maze-race-cache-v1';
+const CACHE_NAME = 'gemini-maze-race-cache-v8';
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
-    'privacy_policy.html',
+    '/privacy_policy.html',
     '/splash.png',
     '/icons/icon-192x192.png',
     '/icons/icon-512x512.png',
@@ -13,24 +13,40 @@ const ASSETS_TO_CACHE = [
     '/sounds/win-game.mp3',
     '/sounds/lose-game.mp3',
     '/sounds/timer-tick.mp3',
-    '/sounds/error.mp3'
+    '/sounds/error.mp3',
+    '/sounds/online-waiting.mp3',
+    '/sounds/emoji-laugh.mp3',
+    '/sounds/emoji-think.mp3',
+    '/sounds/emoji-mind-blown.mp3',
+    '/sounds/emoji-cool.mp3',
+    '/sounds/emoji-wave.mp3',
+    '/sounds/emoji-love.mp3',
+    '/sounds/emoji-angry.mp3',
+    '/sounds/emoji-waiting.mp3',
+    '/home-page-background.png'
 ];
 
-// Install event: cache the application shell
+// Install event: cache the application shell and take control immediately
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('Service Worker: Caching App Shell');
-                return cache.addAll(ASSETS_TO_CACHE);
+                // Use a separate addAll for critical path, and allow non-critical to fail gracefully
+                const criticalAssets = ['/', '/index.html'];
+                cache.addAll(criticalAssets);
+                return cache.addAll(ASSETS_TO_CACHE).catch(error => {
+                    console.warn('Service Worker: Caching non-critical assets failed, but proceeding.', error);
+                });
             })
             .catch(error => {
-                console.error('Failed to cache app shell:', error);
+                console.error('Failed to cache critical app shell:', error);
             })
     );
+    self.skipWaiting();
 });
 
-// Activate event: clean up old caches
+// Activate event: clean up old caches and claim clients
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(cacheNames => {
@@ -41,7 +57,7 @@ self.addEventListener('activate', event => {
                         return caches.delete(cacheName);
                     }
                 })
-            );
+            ).then(() => self.clients.claim());
         })
     );
 });
@@ -49,7 +65,7 @@ self.addEventListener('activate', event => {
 // Fetch event: serve from cache, fallback to network, and cache new resources
 self.addEventListener('fetch', event => {
     // We only want to handle GET requests
-    if (event.request.method !== 'GET') {
+    if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
         return;
     }
     

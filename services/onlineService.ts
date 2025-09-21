@@ -1,7 +1,7 @@
 import mqtt from 'mqtt';
 import type { MqttClient } from 'mqtt';
 import { BOARD_SIZE } from '../constants';
-import type { Player, OnlineGameData } from '../types';
+import type { Player, OnlineGameData, OnlineEmojiEvent } from '../types';
 import { StartPosition } from '../types';
 
 // Using a public MQTT broker for demonstration purposes.
@@ -28,8 +28,10 @@ class OnlineGameService {
     private client: MqttClient | null = null;
     private connectionPromise: Promise<MqttClient> | null = null;
     private onGameStateUpdateCallback: ((data: OnlineGameData) => void) | null = null;
+    private onEmojiEventCallback: ((data: OnlineEmojiEvent) => void) | null = null;
     private onMatchFoundCallback: ((gameId: string, playerId: 1 | 2, state: OnlineGameData) => void) | null = null;
     private subscribedGameId: string | null = null;
+    private subscribedEmojiGameId: string | null = null;
     private subscribedLobbyId: string | null = null;
 
     private connect(): Promise<MqttClient> {
@@ -74,6 +76,9 @@ class OnlineGameService {
             if (topic === `${TOPIC_PREFIX}/game/${this.subscribedGameId}/state` && this.onGameStateUpdateCallback) {
                 this.onGameStateUpdateCallback(data as OnlineGameData);
             }
+            if (topic === `${TOPIC_PREFIX}/game/${this.subscribedEmojiGameId}/emoji` && this.onEmojiEventCallback) {
+                this.onEmojiEventCallback(data as OnlineEmojiEvent);
+            }
             if (topic === `${TOPIC_PREFIX}/lobby/match/${this.subscribedLobbyId}` && this.onMatchFoundCallback) {
                 if (data.type === 'MATCH_FOUND') this.handleMatchFound(data);
             }
@@ -104,6 +109,32 @@ class OnlineGameService {
                 client.unsubscribe(topic);
                 this.subscribedGameId = null;
                 this.onGameStateUpdateCallback = null;
+            });
+        };
+    }
+
+    public async publishEmojiEvent(gameId: string, emoji: string, senderId: 1 | 2) {
+        const client = await this.connect();
+        const topic = `${TOPIC_PREFIX}/game/${gameId}/emoji`;
+        const event: OnlineEmojiEvent = { emoji, senderId, timestamp: Date.now() };
+        // Events should not be retained, they are fire-and-forget.
+        client.publish(topic, JSON.stringify(event), { qos: 1, retain: false });
+    }
+
+    public onEmojiEvent(gameId: string, callback: (data: OnlineEmojiEvent) => void): () => void {
+        this.subscribedEmojiGameId = gameId;
+        this.onEmojiEventCallback = callback;
+        const topic = `${TOPIC_PREFIX}/game/${gameId}/emoji`;
+
+        this.connect().then(client => client.subscribe(topic, { qos: 1 }));
+
+        return () => {
+            this.connect().then(client => {
+                if(this.subscribedEmojiGameId) { // Check if still subscribed before unsubscribing
+                    client.unsubscribe(topic);
+                    this.subscribedEmojiGameId = null;
+                    this.onEmojiEventCallback = null;
+                }
             });
         };
     }
@@ -150,7 +181,7 @@ class OnlineGameService {
                 client.removeListener('message', messageHandler);
                 client.unsubscribe(topic);
                 resolve(null);
-            }, 8000); // 8-second timeout
+            }, 30000); // 30-second timeout
 
             const messageHandler = (t: string, payload: Uint8Array) => {
                 if (t === topic) {

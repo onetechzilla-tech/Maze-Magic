@@ -10,7 +10,7 @@ export const AnimatedMenuBackground: React.FC = () => {
       <div
         className="absolute inset-0 bg-cover bg-center animate-ken-burns"
         style={{
-          backgroundImage: `url('/home-page-background.png')`,
+          backgroundImage: `url('home-page-background.png')`,
         }}
       />
       

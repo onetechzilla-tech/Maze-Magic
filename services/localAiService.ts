@@ -57,7 +57,8 @@ const findBestBlockingWall = (
     aiPlayer: Player,
     humanPlayer: Player,
     walls: Wall[],
-    isValidWallPlacement: (wall: Wall) => boolean
+    isValidWallPlacement: (wall: Wall) => boolean,
+    difficulty: Difficulty
 ): { wall: Omit<Wall, 'playerId'>; score: number } | null => {
     const myPathLength = findShortestPath(aiPlayer.position, aiPlayer.goalRow, walls, humanPlayer.position)?.length || Infinity;
     const humanPath = findShortestPath(humanPlayer.position, humanPlayer.goalRow, walls, aiPlayer.position);
@@ -66,9 +67,11 @@ const findBestBlockingWall = (
 
     let bestWall: Omit<Wall, 'playerId'> | null = null;
     let bestScore = -Infinity;
+    
+    const lookahead = difficulty === Difficulty.HARD ? 10 : 6;
 
     // Look a few steps ahead on the opponent's path to find critical choke points.
-    const pathSegmentsToAnalyze = humanPath.slice(0, Math.min(humanPath.length - 1, 4));
+    const pathSegmentsToAnalyze = humanPath.slice(0, Math.min(humanPath.length - 1, lookahead));
 
     for (let i = 0; i < pathSegmentsToAnalyze.length; i++) {
         const p1 = humanPath[i];
@@ -124,82 +127,123 @@ const getLocalAiMove = (
     difficulty: Difficulty,
     isValidWallPlacement: (wall: Wall) => boolean
 ): AiAction => {
-    // --- Step 1: Find the best possible move ---
+    // --- 1. Basic Setup & Pathfinding ---
     const myPath = findShortestPath(aiPlayer.position, aiPlayer.goalRow, walls, humanPlayer.position);
-    let bestMove = myPath && myPath.length > 1 ? myPath[1] : null;
+    const humanPath = findShortestPath(humanPlayer.position, humanPlayer.goalRow, walls, aiPlayer.position);
+    const myPathLength = myPath?.length || Infinity;
+    const humanPathLength = humanPath?.length || Infinity;
+    
+    const possibleMoves = getPossibleMoves(aiPlayer.position, walls, humanPlayer.position);
+    const bestMove = myPath && myPath.length > 1 ? myPath[1] : possibleMoves[0];
 
-    // If no path exists, find any possible move to escape.
-    if (!bestMove) {
-        const anyMove = getPossibleMoves(aiPlayer.position, walls, humanPlayer.position)[0];
-        if (anyMove) bestMove = anyMove;
-    }
-
-    // If no move is possible at all, the AI is trapped and must pass its turn.
+    // --- 2. Handle Trapped State ---
     if (!bestMove) {
         return { action: 'PASS', reasoning: getRandomMessage('trapped') };
     }
-
-    // Check if the best move is a jump
+    
     const isJump = Math.abs(aiPlayer.position.r - bestMove.r) > 1 || Math.abs(aiPlayer.position.c - bestMove.c) > 1;
-
-    const moveAction: AiAction = {
+    const defaultMoveAction: AiAction = {
         action: 'MOVE',
         position: bestMove,
         reasoning: isJump ? getRandomMessage('jumping') : getRandomMessage('defaultMove'),
     };
 
-    // --- Step 2: For EASY difficulty, always choose the best move ---
+    // --- 3. EASY Difficulty ---
     if (difficulty === Difficulty.EASY) {
-        return moveAction;
-    }
+        const isHumanWinning = humanPathLength < myPathLength;
 
-    // --- Step 3: For MEDIUM & HARD, consider placing a wall ---
-    if (aiPlayer.wallsLeft === 0) {
-        return moveAction; // No walls left, must move.
-    }
-    
-    const humanPathLength = findShortestPath(humanPlayer.position, humanPlayer.goalRow, walls, aiPlayer.position)?.length || Infinity;
-    const myPathLength = myPath?.length || Infinity;
-    
-    const bestWallDetails = findBestBlockingWall(aiPlayer, humanPlayer, walls, isValidWallPlacement);
-
-    if (bestWallDetails) {
-        const wallAction: AiAction = {
-            action: 'PLACE_WALL',
-            position: bestWallDetails.wall,
-            orientation: bestWallDetails.wall.orientation,
-            reasoning: getRandomMessage('blocking')
-        };
-        
-        const isWinning = myPathLength <= humanPathLength;
-
-        if (difficulty === Difficulty.HARD) {
-            // If losing, place any effective wall.
-            if (!isWinning && bestWallDetails.score > 0) {
-                 return wallAction;
-            }
-            // If winning, only place a wall if it's a very strong, decisive move.
-            if (isWinning && bestWallDetails.score >= 3) {
-                 return wallAction;
+        // If the human is winning, there's a 33% chance to try and block them.
+        if (aiPlayer.wallsLeft > 0 && isHumanWinning && Math.random() < 0.33) {
+            const bestWallToBlock = findBestBlockingWall(aiPlayer, humanPlayer, walls, isValidWallPlacement, difficulty);
+            
+            if (bestWallToBlock) {
+                 return {
+                    action: 'PLACE_WALL',
+                    position: bestWallToBlock.wall,
+                    orientation: bestWallToBlock.wall.orientation,
+                    reasoning: "Trying to slow you down! 😈"
+                };
             }
         }
+        
+        // Otherwise, just make a simple move forward.
+        return defaultMoveAction;
+    }
 
-        if (difficulty === Difficulty.MEDIUM) {
-            // Medium AI only places a wall if it's losing and finds an obvious block.
-            if (!isWinning && bestWallDetails.score > 0) {
+    // --- 4. MEDIUM & HARD Difficulty Shared Logic ---
+    if (aiPlayer.wallsLeft === 0) {
+        return defaultMoveAction; // No walls, must move
+    }
+
+    const bestWallDetails = findBestBlockingWall(aiPlayer, humanPlayer, walls, isValidWallPlacement, difficulty);
+
+    // --- 5. MEDIUM Difficulty ---
+    if (difficulty === Difficulty.MEDIUM) {
+        const isLosingOrTied = myPathLength >= humanPathLength;
+        const hasWallAdvantage = aiPlayer.wallsLeft > humanPlayer.wallsLeft;
+
+        if (isLosingOrTied && bestWallDetails && bestWallDetails.score > 0) {
+            // Place a wall if it's a good block (score > 1), or if we are not winning and have a wall advantage.
+            if (bestWallDetails.score > 1 || hasWallAdvantage) {
+                return {
+                    action: 'PLACE_WALL',
+                    position: bestWallDetails.wall,
+                    orientation: bestWallDetails.wall.orientation,
+                    reasoning: getRandomMessage('blocking')
+                };
+            }
+        }
+    }
+    
+    // --- 6. HARD Difficulty ---
+    if (difficulty === Difficulty.HARD) {
+        // If about to win, just win.
+        if (myPathLength <= 2) {
+             defaultMoveAction.reasoning = getRandomMessage('winning');
+             return defaultMoveAction;
+        }
+
+        const advantage = humanPathLength - myPathLength;
+        const hasWallAdvantage = aiPlayer.wallsLeft > humanPlayer.wallsLeft;
+
+        // Only consider placing a wall if a beneficial one exists
+        if (bestWallDetails && bestWallDetails.score > 0) {
+            const wallAction: AiAction = {
+                action: 'PLACE_WALL',
+                position: bestWallDetails.wall,
+                orientation: bestWallDetails.wall.orientation,
+                reasoning: getRandomMessage('blocking'),
+            };
+
+            // State: LOSING (advantage < 0)
+            // Be very aggressive with walls. If there's any good wall, use it.
+            if (advantage < 0) {
                 return wallAction;
             }
+
+            // State: TIED or SLIGHTLY WINNING (0 <= advantage <= 2)
+            // Be strategic. Place a wall if it's a high-impact move, or if we have a wall advantage.
+            if (advantage <= 2) {
+                if (bestWallDetails.score >= 2) return wallAction; // A good impact wall
+                if (hasWallAdvantage) return wallAction; // Press the resource advantage
+            }
+            
+            // State: WINNING (advantage > 2)
+            // Be conservative. Only place a wall if it's an overwhelmingly good move or a necessary defense.
+            if (advantage > 2) {
+                if (humanPathLength <= 3) return wallAction; // Opponent is getting close, must block.
+                if (bestWallDetails.score > 4) return wallAction; // A "killer" move that seals the deal.
+            }
         }
     }
 
-    // --- Step 4: If no wall was placed, determine the move's reasoning based on game state ---
-    if (myPathLength <= 3) { // Close to winning
-        moveAction.reasoning = getRandomMessage('winning');
-    } else if (myPathLength > humanPathLength + 2) { // Losing significantly
-        moveAction.reasoning = getRandomMessage('losing');
+    // --- 7. Fallback to default move with better reasoning ---
+    if (myPathLength <= humanPathLength) {
+        defaultMoveAction.reasoning = getRandomMessage('winning');
+    } else if (myPathLength > humanPathLength + 3) {
+        defaultMoveAction.reasoning = getRandomMessage('losing');
     }
-
-    return moveAction;
+    return defaultMoveAction;
 };
 
 export default getLocalAiMove;

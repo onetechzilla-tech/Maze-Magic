@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useRef } from 'react';
 import { BOARD_SIZE } from '../constants';
 import type { Player, Position, Wall } from '../types';
 import { WallPlacementGuide } from './WallPlacementGuide';
@@ -14,10 +15,30 @@ type GameBoardProps = {
   onWallPreview: (wall: Omit<Wall, 'playerId'>) => void;
   onCancelWallPreview: () => void;
   currentPlayerId: 1 | 2;
+  boardPixelSize: number;
 };
 
 const WALL_THICKNESS = 8; // in pixels
 const GRID_GAP = 5; // in pixels
+
+// Helper function to check for basic invalid wall placements (out of bounds, overlaps, crosses)
+const isPlacementInvalid = (wall: Omit<Wall, 'playerId'>, existingWalls: Wall[]): boolean => {
+  if (wall.orientation === 'horizontal' && (wall.c < 0 || wall.c >= BOARD_SIZE - 1 || wall.r <= 0 || wall.r >= BOARD_SIZE)) return true;
+  if (wall.orientation === 'vertical' && (wall.r < 0 || wall.r >= BOARD_SIZE - 1 || wall.c <= 0 || wall.c >= BOARD_SIZE)) return true;
+    
+  return existingWalls.some(w => {
+    if (w.r === wall.r && w.c === wall.c && w.orientation === wall.orientation) return true;
+    
+    if (wall.orientation === 'horizontal') {
+        if (w.orientation === 'horizontal' && w.r === wall.r && Math.abs(w.c - wall.c) < 2) return true;
+        if (w.orientation === 'vertical' && w.r === wall.r - 1 && w.c === wall.c + 1) return true;
+    } else { // vertical
+        if (w.orientation === 'vertical' && w.c === wall.c && Math.abs(w.r - wall.r) < 2) return true;
+        if (w.orientation === 'horizontal' && w.r === wall.r + 1 && w.c === wall.c - 1) return true;
+    }
+    return false;
+  });
+};
 
 const GameBoard: React.FC<GameBoardProps> = ({
   players,
@@ -30,8 +51,82 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onCancelWallPreview,
   onWallPreview,
   currentPlayerId,
+  boardPixelSize
 }) => {
   const currentPlayerColor = players[currentPlayerId]?.color;
+  const isPointerDown = useRef(false);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!isPlacingWall) return;
+    isPointerDown.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    handlePointerMove(e); // Allow preview on first touch
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    isPointerDown.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isPlacingWall || !isPointerDown.current || boardPixelSize === 0) return;
+    
+    const board = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - board.left;
+    const y = e.clientY - board.top;
+
+    const cellSize = (boardPixelSize - (BOARD_SIZE - 1) * GRID_GAP) / BOARD_SIZE;
+    const totalBlockSize = cellSize + GRID_GAP;
+
+    const row = Math.floor(y / totalBlockSize);
+    const col = Math.floor(x / totalBlockSize);
+
+    const xInBlock = x % totalBlockSize;
+    const yInBlock = y % totalBlockSize;
+    
+    let wall: Omit<Wall, 'playerId'> | null = null;
+    
+    const distToVertical = Math.abs(xInBlock - (cellSize + GRID_GAP / 2));
+    const distToHorizontal = Math.abs(yInBlock - (cellSize + GRID_GAP / 2));
+
+    if (distToVertical < distToHorizontal) {
+        // Closer to a vertical wall boundary
+        const wallC = Math.round(x / totalBlockSize);
+
+        // Try placing downwards first (spans from 'row' to 'row+1')
+        const wallDown: Omit<Wall, 'playerId'> = { r: row, c: wallC, orientation: 'vertical' };
+        if (!isPlacementInvalid(wallDown, walls)) {
+            wall = wallDown;
+        } else {
+            // If downwards is invalid, try upwards (spans from 'row-1' to 'row')
+            const wallUp: Omit<Wall, 'playerId'> = { r: row - 1, c: wallC, orientation: 'vertical' };
+            if (!isPlacementInvalid(wallUp, walls)) {
+                wall = wallUp;
+            }
+        }
+    } else {
+        // Closer to a horizontal wall boundary
+        const wallR = Math.round(y / totalBlockSize);
+
+        // Try placing to the right first (spans from 'col' to 'col+1')
+        const wallRight: Omit<Wall, 'playerId'> = { r: wallR, c: col, orientation: 'horizontal' };
+        if (!isPlacementInvalid(wallRight, walls)) {
+            wall = wallRight;
+        } else {
+            // If right is invalid, try to the left (spans from 'col-1' to 'col')
+            const wallLeft: Omit<Wall, 'playerId'> = { r: wallR, c: col - 1, orientation: 'horizontal' };
+            if (!isPlacementInvalid(wallLeft, walls)) {
+                wall = wallLeft;
+            }
+        }
+    }
+
+    if (wall) {
+        if (!wallPreview || wall.r !== wallPreview.r || wall.c !== wallPreview.c || wall.orientation !== wallPreview.orientation) {
+            onWallPreview(wall);
+        }
+    }
+  };
   
   const renderCell = (r: number, c: number) => {
     const player1 = players[1];
@@ -88,15 +183,15 @@ const GameBoard: React.FC<GameBoardProps> = ({
         }}
         aria-label={`Cell ${r}, ${c}`}
       >
-        {isPlayer1Here && playerPiece(players[1], isSelected && players[1].id === currentPlayerId)}
-        {isPlayer2Here && playerPiece(players[2], isSelected && players[2].id === currentPlayerId)}
+        {isPlayer1Here && playerPiece(players[1], isSelected && 1 === currentPlayerId)}
+        {isPlayer2Here && playerPiece(players[2], isSelected && 2 === currentPlayerId)}
         {isValidMove && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div 
               className="w-1/3 h-1/3 rounded-full animate-pulse"
               style={{ 
                 backgroundColor: currentPlayerColor || '#60a5fa',
-                boxShadow: `0 0 8px ${currentPlayerColor}`
+                boxShadow: `0 0 8px ${currentPlayerColor || '#60a5fa'}`
               }}
             ></div>
           </div>
@@ -130,7 +225,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
             style={{ 
               ...style, 
               backgroundColor: wallColor,
-              boxShadow: `0 0 6px ${wallColor}, 0 0 10px ${wallColor}`
+              boxShadow: `0 0 12px ${wallColor}, 0 0 20px ${wallColor}`
             }}
         />
     );
@@ -166,13 +261,18 @@ const GameBoard: React.FC<GameBoardProps> = ({
   return (
     <div className="w-full h-full p-2 bg-black/20 rounded-2xl shadow-lg border border-purple-500/30">
       <div
-        className="relative grid h-full w-full"
+        className="relative grid h-full w-full border-2 border-purple-500/40 rounded-lg touch-none"
         style={{
           gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
           gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`,
           gap: `${GRID_GAP}px`,
           background: 'radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, rgba(0,0,0,0) 70%)',
+          boxShadow: '0 0 10px rgba(192, 38, 211, 0.3), inset 0 0 10px rgba(192, 38, 211, 0.2)',
         }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
       >
         <div 
           className="absolute inset-0 grid pointer-events-none"
@@ -200,15 +300,14 @@ const GameBoard: React.FC<GameBoardProps> = ({
             {walls.map(renderWall)}
         </div>
         
-        {isPlacingWall && currentPlayerColor && (
-          <WallPlacementGuide 
-            playerColor={currentPlayerColor}
-            existingWalls={walls}
-            onWallClick={onWallPreview}
-            wallPreview={wallPreview}
-            onCancel={onCancelWallPreview}
-          />
-        )}
+        <WallPlacementGuide 
+          visible={isPlacingWall && !!currentPlayerColor}
+          playerColor={currentPlayerColor || ''}
+          existingWalls={walls}
+          onWallClick={onWallPreview}
+          wallPreview={wallPreview}
+          onCancel={onCancelWallPreview}
+        />
       </div>
     </div>
   );

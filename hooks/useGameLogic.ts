@@ -1,15 +1,26 @@
+
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { BOARD_SIZE } from '../constants';
 import getAiMove from '../services/geminiService';
 import getLocalAiMove from '../services/localAiService';
 import { onlineService } from '../services/onlineService';
-import { authService } from '../services/authService';
 import { findShortestPath, getPossibleMoves } from '../utils/pathfinding';
-import type { Player, Position, Wall, AiAction, OnlineGameData, OnlineGameAction } from '../types';
+import type { Player, Position, Wall, AiAction, OnlineGameData, OnlineGameAction, OnlineEmojiEvent } from '../types';
 import { GameState, GameMode, Difficulty, AiType, StartPosition } from '../types';
 import { soundService, Sound } from '../services/soundService';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const emojiSounds: Record<string, Sound> = {
+  '😂': Sound.EmojiLaugh,
+  '🤔': Sound.EmojiThink,
+  '🤯': Sound.EmojiMindBlown,
+  '😎': Sound.EmojiCool,
+  '👋': Sound.EmojiWave,
+  '❤️': Sound.EmojiLove,
+  '😡': Sound.EmojiAngry,
+  '⏳': Sound.EmojiWaiting,
+};
 
 const useGameLogic = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
@@ -37,10 +48,12 @@ const useGameLogic = () => {
   const [onlinePlayerId, setOnlinePlayerId] = useState<1 | 2 | null>(null);
   const [onlineRequestTimeout, setOnlineRequestTimeout] = useState<number | null>(null);
   const [initialWalls, setInitialWalls] = useState(10);
-  const [pendingGameStartArgs, setPendingGameStartArgs] = useState<any>(null);
   const [pendingJoinId, setPendingJoinId] = useState<string | null>(null);
   const [lastStateTimestamp, setLastStateTimestamp] = useState(0);
+  const [travelingEmoji, setTravelingEmoji] = useState<{ emoji: string; fromPlayerId: 1 | 2; key: number } | null>(null);
+  const [isJoiningGame, setIsJoiningGame] = useState(false);
   const lastStateTimestampRef = useRef(lastStateTimestamp);
+  const isJoinCancelled = useRef(false);
 
   useEffect(() => {
     lastStateTimestampRef.current = lastStateTimestamp;
@@ -58,6 +71,7 @@ const useGameLogic = () => {
     setApiError(null);
     setGameTime(0);
     setTurnTime(configuredTurnTime);
+    setTravelingEmoji(null);
     
     if(onlineRequestTimeout) clearTimeout(onlineRequestTimeout);
     setOnlineRequestTimeout(null);
@@ -67,7 +81,6 @@ const useGameLogic = () => {
     }
     setOnlineGameId(null);
     setOnlinePlayerId(null);
-    setPendingGameStartArgs(null);
     setPendingJoinId(null);
     setLastStateTimestamp(0);
 
@@ -105,20 +118,11 @@ const useGameLogic = () => {
     return newState;
   }, [configuredTurnTime]);
 
-  const cancelAuth = useCallback(() => {
-    setPendingGameStartArgs(null);
-    setGameState(GameState.MENU);
-  }, []);
-
   const cancelJoin = useCallback(() => {
     setPendingJoinId(null);
   }, []);
 
   const returnToMenu = useCallback(() => {
-    if (gameState === GameState.AWAITING_AUTH) {
-      cancelAuth();
-      return;
-    }
     if (gameState === GameState.PLAYING && gameMode === GameMode.PVO && onlineGameId && onlinePlayerId && !winner) {
         // Handle Forfeit
         const currentState: OnlineGameData = { players, walls, currentPlayerId, winner, gameTime, turnTime, timestamp: lastStateTimestamp };
@@ -132,28 +136,29 @@ const useGameLogic = () => {
         setGameState(GameState.MENU);
         resetGameState(false);
     }
-  }, [resetGameState, gameState, gameMode, onlineGameId, onlinePlayerId, winner, players, walls, currentPlayerId, gameTime, turnTime, applyActionToState, cancelAuth, lastStateTimestamp]);
+  }, [resetGameState, gameState, gameMode, onlineGameId, onlinePlayerId, winner, players, walls, currentPlayerId, gameTime, turnTime, applyActionToState, lastStateTimestamp]);
 
-  const initializeLocalGame = useCallback((mode: GameMode, p1Name: string = 'Player 1', selectedAiType: AiType, selectedDifficulty: Difficulty, duration: number, startPos: StartPosition, wallsCount: number) => {
+  const initializeLocalGame = useCallback((mode: GameMode, p1Name: string = 'Player 1', p2Name: string = 'Player 2', selectedAiType: AiType, selectedDifficulty: Difficulty, duration: number, startPos: StartPosition, wallsCount: number) => {
     resetGameState();
-    let p2Name = 'Player 2';
+    let finalP2Name = p2Name;
+
     if (mode === GameMode.PVC) {
         if (selectedAiType === AiType.GEMINI) {
             const difficultyString = selectedDifficulty.charAt(0) + selectedDifficulty.slice(1).toLowerCase();
-            p2Name = `Gemini AI (${difficultyString})`;
+            finalP2Name = `Gemini AI (${difficultyString})`;
         } else {
             switch (selectedDifficulty) {
                 case Difficulty.EASY:
-                    p2Name = 'AI (Easy)';
+                    finalP2Name = 'AI (Easy)';
                     break;
                 case Difficulty.MEDIUM:
-                    p2Name = 'AI (Medium)';
+                    finalP2Name = 'AI (Medium)';
                     break;
                 case Difficulty.HARD:
-                    p2Name = 'AI (Hard)';
+                    finalP2Name = 'AI (Hard)';
                     break;
                 default:
-                    p2Name = 'AI'; // Fallback
+                    finalP2Name = 'AI'; // Fallback
                     break;
             }
         }
@@ -164,7 +169,7 @@ const useGameLogic = () => {
     const p2Col = startPos === StartPosition.CENTER ? Math.floor(BOARD_SIZE / 2) : (BOARD_SIZE - 1) - p1Col;
     
     const p1: Player = { id: 1, name: p1Name, color: '#22d3ee', position: { r: BOARD_SIZE - 1, c: p1Col }, wallsLeft: wallsCount, goalRow: 0 };
-    const p2: Player = { id: 2, name: p2Name, color: '#ec4899', position: { r: 0, c: p2Col }, wallsLeft: wallsCount, goalRow: BOARD_SIZE - 1 };
+    const p2: Player = { id: 2, name: finalP2Name, color: '#ec4899', position: { r: 0, c: p2Col }, wallsLeft: wallsCount, goalRow: BOARD_SIZE - 1 };
 
     setPlayers({ 1: p1, 2: p2 });
     setConfiguredTurnTime(duration);
@@ -172,31 +177,7 @@ const useGameLogic = () => {
     setGameState(GameState.PLAYING);
   }, [resetGameState]);
   
-  const handleAuthSuccess = useCallback(() => {
-    if (pendingGameStartArgs) {
-        const { mode, diff, p1Name, type, duration, startPos, wallsCount } = pendingGameStartArgs;
-        setGameMode(mode);
-        setDifficulty(diff);
-        setAiType(type);
-        setStartPosition(startPos);
-        initializeLocalGame(mode, p1Name, type, diff, duration, startPos, wallsCount);
-        setPendingGameStartArgs(null);
-    } else if (gameState === GameState.AWAITING_AUTH) {
-        setGameState(GameState.MENU);
-    }
-  }, [pendingGameStartArgs, initializeLocalGame, gameState]);
-
-  useEffect(() => {
-      const unsubscribe = authService.onAuthStateChanged((isSignedIn) => {
-          if (isSignedIn && gameState === GameState.AWAITING_AUTH) {
-              handleAuthSuccess();
-          }
-      });
-      return unsubscribe;
-  }, [gameState, handleAuthSuccess]);
-
-
-  const isValidWallPlacement = useCallback((wall: Wall, currentWalls: Wall[], p1: Player, p2: Player): true | string => {
+  const isValidWallPlacement = useCallback((wall: Wall, currentWalls: Wall[], p1: Player, p2: Player, perspectivePlayerId?: 1 | 2): true | string => {
     const player = p1.id === wall.playerId ? p1 : p2;
     if (!player || player.wallsLeft <= 0) return "You have no walls left.";
     
@@ -217,13 +198,23 @@ const useGameLogic = () => {
 
     const newWalls = [...currentWalls, wall];
     const p1PathExists = findShortestPath(p1.position, p1.goalRow, newWalls, p2.position) !== null;
-    if (!p1PathExists) return `This wall would trap ${p1.name}.`;
+    if (!p1PathExists) {
+        if (gameMode === GameMode.PVP && perspectivePlayerId) {
+             return p1.id === perspectivePlayerId ? "This wall would trap you." : `This wall would trap your opponent (${p1.name}).`;
+        }
+        return `This wall would trap ${p1.name}.`;
+    }
 
     const p2PathExists = findShortestPath(p2.position, p2.goalRow, newWalls, p1.position) !== null;
-    if (!p2PathExists) return `This wall would trap ${p2.name}.`;
+    if (!p2PathExists) {
+        if (gameMode === GameMode.PVP && perspectivePlayerId) {
+             return p2.id === perspectivePlayerId ? "This wall would trap you." : `This wall would trap your opponent (${p2.name}).`;
+        }
+        return `This wall would trap ${p2.name}.`;
+    }
     
     return true;
-  }, []);
+  }, [gameMode]);
 
   const switchTurn = useCallback(() => {
     setCurrentPlayerId(prev => (prev === 1 ? 2 : 1));
@@ -350,7 +341,7 @@ const useGameLogic = () => {
     setWallPlacementError(null);
     const newWall: Wall = { ...realWall, playerId: currentPlayerId };
     
-    const validationResult = isValidWallPlacement(newWall, walls, players[1], players[2]);
+    const validationResult = isValidWallPlacement(newWall, walls, players[1], players[2], currentPlayerId);
     if (validationResult !== true) {
         setWallPlacementError(validationResult);
         return;
@@ -402,21 +393,36 @@ const useGameLogic = () => {
   }, [resetGameState, returnToMenu]);
 
   const handleJoinOnlineGame = useCallback(async (gameId: string, p2Name: string) => {
-      const initialState = await onlineService.joinGame(gameId, p2Name);
-      if (initialState) {
-        setOnlineGameId(gameId);
-        setOnlinePlayerId(2);
-        setPendingJoinId(null);
-        setConfiguredTurnTime(initialState.turnTime);
-        setInitialWalls(initialState.players[1].wallsLeft);
-        setGameMode(GameMode.PVO);
-        updateStateFromOnline(initialState);
-      } else {
-        setApiError("Could not join game. It might be full or expired.");
-        setPendingJoinId(null); // Clear the ID on failure
+      isJoinCancelled.current = false;
+      setIsJoiningGame(true);
+      try {
+          const initialState = await onlineService.joinGame(gameId, p2Name);
+          if (isJoinCancelled.current) return;
+
+          if (initialState) {
+            setOnlineGameId(gameId);
+            setOnlinePlayerId(2);
+            setPendingJoinId(null);
+            setConfiguredTurnTime(initialState.turnTime);
+            setInitialWalls(initialState.players[1].wallsLeft);
+            setGameMode(GameMode.PVO);
+            updateStateFromOnline(initialState);
+          } else {
+            setApiError("Could not join the game.");
+            setPendingJoinId(null);
+          }
+      } finally {
+          if (!isJoinCancelled.current) {
+            setIsJoiningGame(false);
+          }
       }
   }, [updateStateFromOnline]);
   
+  const cancelJoinAttempt = useCallback(() => {
+    isJoinCancelled.current = true;
+    setIsJoiningGame(false);
+  }, []);
+
   const handleFindMatch = useCallback(async (pName: string, duration: number, startPos: StartPosition, wallsCount: number) => {
     resetGameState();
     setGameMode(GameMode.PVO);
@@ -483,7 +489,7 @@ const useGameLogic = () => {
     try {
         let aiAction: AiAction;
         if (aiType === AiType.LOCAL) {
-            const checkWall = (wall: Wall) => isValidWallPlacement(wall, walls, players[1], players[2]) === true;
+            const checkWall = (wall: Wall) => isValidWallPlacement(wall, walls, players[1], players[2], 2) === true;
             aiAction = getLocalAiMove(players[2], players[1], walls, difficulty, checkWall);
         } else {
             aiAction = await getAiMove(players, 2, walls, difficulty);
@@ -502,7 +508,7 @@ const useGameLogic = () => {
         } else if (aiAction.action === 'PLACE_WALL') {
             if (!aiAction.position || !aiAction.orientation) throw new Error("AI action 'PLACE_WALL' is missing properties.");
             const wallToPlace = { r: aiAction.position.r, c: aiAction.position.c, orientation: aiAction.orientation };
-            if (isValidWallPlacement({ ...wallToPlace, playerId: 2 }, walls, players[1], players[2]) === true) handlePlaceWall(wallToPlace);
+            if (isValidWallPlacement({ ...wallToPlace, playerId: 2 }, walls, players[1], players[2], 2) === true) handlePlaceWall(wallToPlace);
             else throw new Error("AI suggested an invalid wall placement.");
         } else {
             throw new Error(`AI returned an invalid action type.`);
@@ -643,12 +649,16 @@ const useGameLogic = () => {
     const gameId = params.get('join');
     if (gameId) {
       setPendingJoinId(gameId);
-      window.history.replaceState({}, document.title, window.location.pathname); 
+      const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+      window.history.replaceState({}, document.title, cleanUrl); 
     }
   }, []);
 
 
-  const handleWallPreview = useCallback((wall: Omit<Wall, 'playerId'>) => setWallPreview(wall), []);
+  const handleWallPreview = useCallback((wall: Omit<Wall, 'playerId'>) => {
+    setWallPlacementError(null); // Clear previous errors on new preview
+    setWallPreview(wall)
+  }, []);
   const confirmWallPlacement = useCallback(() => {
     if (wallPreview) {
         handlePlaceWall(wallPreview);
@@ -656,7 +666,11 @@ const useGameLogic = () => {
         setIsPlacingWall(false); // Always exit placing mode after confirming
     }
   }, [wallPreview, handlePlaceWall]);
-  const cancelWallPlacement = useCallback(() => setWallPreview(null), []);
+
+  const cancelWallPlacement = useCallback(() => {
+    setWallPreview(null);
+    setIsPlacingWall(false); // Exit wall placement mode completely.
+  }, []);
   
   const togglePlacingWall = () => {
     if (isPlacingWall) setWallPreview(null);
@@ -666,18 +680,12 @@ const useGameLogic = () => {
     setWallPlacementError(null);
   };
 
-  const startGame = (mode: GameMode, diff: Difficulty, p1Name: string, type: AiType, duration: number, startPos: StartPosition, wallsCount: number) => {
-    if (mode === GameMode.PVC && type === AiType.GEMINI && !authService.isAuthenticated()) {
-        setPendingGameStartArgs({ mode, diff, p1Name, type, duration, startPos, wallsCount });
-        setGameState(GameState.AWAITING_AUTH);
-        authService.signIn(); // Initiate sign-in process
-    } else {
-        setGameMode(mode);
-        setDifficulty(diff);
-        setAiType(type);
-        setStartPosition(startPos);
-        initializeLocalGame(mode, p1Name, type, diff, duration, startPos, wallsCount);
-    }
+  const startGame = (mode: GameMode, diff: Difficulty, p1Name: string, p2Name: string, type: AiType, duration: number, startPos: StartPosition, wallsCount: number) => {
+    setGameMode(mode);
+    setDifficulty(diff);
+    setAiType(type);
+    setStartPosition(startPos);
+    initializeLocalGame(mode, p1Name, p2Name, type, diff, duration, startPos, wallsCount);
   }
 
   // This uses the REAL currentPlayerId from state to determine if it's the user's turn.
@@ -693,24 +701,22 @@ const useGameLogic = () => {
   }, [gameState, gameMode, currentPlayerId, onlinePlayerId, winner]);
 
   // --- Create derived state for UI display based on perspective ---
-  // Fix: Explicitly type the return value of useMemo to prevent type widening of player IDs.
   const displayPlayers = useMemo<{ [key: number]: Player }>(() => {
     if (!isPlayer2Perspective || !players[1] || !players[2]) {
       return players;
     }
-    // For P2, swap player data and transform positions so P2 is at the bottom
+    // For P2, swap player data and transform positions so P2 is at the bottom.
+    // The player's original ID is preserved for display on the pawn.
     return {
-      1: { 
-        ...players[2], 
-        id: 1, // Fix: ensure display player 1 has id 1
+      1: { // The player at the bottom of the screen (from P2's perspective, this is P2)
+        ...players[2], // real player 2 data, includes id: 2
         position: transformPosition(players[2].position)!,
-        goalRow: BOARD_SIZE - 1 - players[2].goalRow, // Transform goal row
+        goalRow: BOARD_SIZE - 1 - players[2].goalRow,
       },
-      2: { 
-        ...players[1],
-        id: 2, // Fix: ensure display player 2 has id 2
+      2: { // The player at the top of the screen (from P2's perspective, this is P1)
+        ...players[1], // real player 1 data, includes id: 1
         position: transformPosition(players[1].position)!,
-        goalRow: BOARD_SIZE - 1 - players[1].goalRow, // Transform goal row
+        goalRow: BOARD_SIZE - 1 - players[1].goalRow,
       },
     };
   }, [isPlayer2Perspective, players, transformPosition]);
@@ -738,6 +744,60 @@ const useGameLogic = () => {
   const displaySelectedPiece = useMemo(() => transformPosition(selectedPiece), [selectedPiece, transformPosition]);
   const displayValidMoves = useMemo(() => validMoves.map(m => transformPosition(m)!), [validMoves, transformPosition]);
 
+  const handleSendEmoji = useCallback((emoji: string, pvpSenderId?: 1 | 2) => {
+    if (gameState !== GameState.PLAYING) return;
+
+    if (emojiSounds[emoji]) {
+        soundService.play(emojiSounds[emoji]);
+    }
+    
+    if (gameMode === GameMode.PVO && onlineGameId && onlinePlayerId) {
+        onlineService.publishEmojiEvent(onlineGameId, emoji, onlinePlayerId);
+        // Optimistically show your own sent emoji
+        setTravelingEmoji({ emoji, fromPlayerId: onlinePlayerId, key: Date.now() });
+
+    } else if (gameMode === GameMode.PVP && pvpSenderId) {
+        setTravelingEmoji({ emoji, fromPlayerId: pvpSenderId, key: Date.now() });
+    }
+  }, [gameState, gameMode, onlineGameId, onlinePlayerId]);
+
+  // Effect for traveling emoji
+  useEffect(() => {
+    if (!travelingEmoji) return;
+    const timer = setTimeout(() => {
+        setTravelingEmoji(null);
+    }, 1500); // match animation duration
+    return () => clearTimeout(timer);
+  }, [travelingEmoji]);
+
+  // Effect for online emoji subscription
+  useEffect(() => {
+    if (gameMode !== GameMode.PVO || !onlineGameId || !onlinePlayerId) return;
+
+    const handleEmojiEvent = (data: OnlineEmojiEvent) => {
+        // Don't show pop-up for emojis you sent yourself
+        if (data.senderId === onlinePlayerId) return;
+
+        if (emojiSounds[data.emoji]) {
+            soundService.play(emojiSounds[data.emoji]);
+        }
+
+        setTravelingEmoji({ emoji: data.emoji, fromPlayerId: data.senderId, key: data.timestamp });
+    };
+
+    const unsubscribe = onlineService.onEmojiEvent(onlineGameId, handleEmojiEvent);
+    return () => unsubscribe();
+
+  }, [gameMode, onlineGameId, onlinePlayerId]);
+
+  const clearWallPlacementError = useCallback(() => {
+    setWallPlacementError(null);
+  }, []);
+
+  const clearApiError = useCallback(() => {
+    setApiError(null);
+  }, []);
+
   return {
     gameState, gameMode, difficulty, aiType, 
     currentPlayerId: displayCurrentPlayerId, // Return the transformed ID for the UI
@@ -752,14 +812,19 @@ const useGameLogic = () => {
     initialWalls,
     isMyTurn, // This is now the source of truth for UI interactivity
     pendingJoinId,
+    travelingEmoji,
+    isJoiningGame,
     setShowRateLimitModal,
     startGame, handleCellClick: handleMove,
     handleWallPreview,
     confirmWallPlacement, cancelWallPlacement,
     togglePlacingWall, returnToMenu,
     handleCreateOnlineGame, handleJoinOnlineGame, handleFindMatch, handleCancelFindMatch, handleCancelCreateGame,
-    cancelAuth,
     cancelJoin,
+    cancelJoinAttempt,
+    handleSendEmoji,
+    clearWallPlacementError,
+    clearApiError,
   };
 };
 

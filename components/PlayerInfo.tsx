@@ -3,11 +3,19 @@ import type { Player } from '../types';
 
 type PlayerInfoProps = {
   player: Player;
+  reverse?: boolean;
+  size?: 'sm' | 'md';
 };
 
-const PlayerInfo: React.FC<PlayerInfoProps> = ({ player }) => {
+const PlayerInfo: React.FC<PlayerInfoProps> = ({ player, reverse, size = 'md' }) => {
+  const containerClasses = size === 'sm' 
+    ? "magical-container rounded-xl p-2 flex items-center space-x-2" 
+    : "magical-container rounded-xl p-3 flex items-center space-x-3";
+    
+  const textSizeClasses = size === 'sm' ? "text-sm" : "text-sm md:text-base";
+
   return (
-    <div className="magical-container rounded-xl p-3 flex items-center space-x-3">
+    <div className={`${containerClasses} ${reverse ? 'flex-row-reverse space-x-reverse' : ''}`}>
       <div 
         className={`w-6 h-6 rounded-full flex-shrink-0`} 
         style={{ 
@@ -16,8 +24,8 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({ player }) => {
         }}
       ></div>
       <div>
-        <p className="font-semibold text-gray-200 text-sm md:text-base whitespace-nowrap">{player.name}</p>
-        <p className="text-sm md:text-base text-gray-400">{player.wallsLeft} walls</p>
+        <p className={`font-semibold text-gray-200 whitespace-nowrap ${textSizeClasses}`}>{player.name}</p>
+        <p className={`text-gray-400 ${textSizeClasses}`}>{player.wallsLeft} walls</p>
       </div>
     </div>
   );
