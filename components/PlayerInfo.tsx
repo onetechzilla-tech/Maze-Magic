@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Player } from '../types';
 
@@ -23,8 +24,8 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({ player, reverse, size = 'md' })
           boxShadow: `0 0 8px ${player.color}`
         }}
       ></div>
-      <div>
-        <p className={`font-semibold text-gray-200 whitespace-nowrap ${textSizeClasses}`}>{player.name}</p>
+      <div className="min-w-0">
+        <p className={`font-semibold text-gray-200 truncate ${textSizeClasses}`}>{player.name}</p>
         <p className={`text-gray-400 ${textSizeClasses}`}>{player.wallsLeft} walls</p>
       </div>
     </div>
