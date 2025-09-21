@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameLogic } from './hooks/useGameLogic';
 import GameBoard from './components/GameBoard';
@@ -319,10 +320,12 @@ const App: React.FC = () => {
     // Back button handling logic
     useEffect(() => {
         const handlePopState = (e: PopStateEvent) => {
+            // The logic for what to do on back button press.
+            // When this event fires, the history stack has already been popped by the browser.
+            // Our job is to update the UI to reflect the new (previous) state.
+            // We preventDefault to stop any further browser navigation if we handle it.
             e.preventDefault();
 
-            // The logic for what to do on back button press
-            // Order is important: from most specific (modal) to most general (game state)
             if (showNewGameConfirm) { setShowNewGameConfirm(false); return; }
             if (showRateLimitModal) { setShowRateLimitModal(false); return; }
             if (showHelp) { setShowHelp(false); return; }
@@ -354,8 +357,12 @@ const App: React.FC = () => {
                 return;
             }
             
-            // If we've handled all our states, allow the browser to go back (e.g., exit the app).
-            window.history.back();
+            // If we've handled all our states and are on the main menu,
+            // the user likely wants to exit. We pushed a state, so we need to go back again.
+            // This is the one case where we ask the browser to navigate.
+            if (gameState === GameState.MENU && menuScreen === 'main') {
+                window.history.back();
+            }
         };
 
         window.addEventListener('popstate', handlePopState);

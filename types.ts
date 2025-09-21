@@ -68,6 +68,7 @@ export type OnlineGameData = {
     gameTime: number;
     turnTime: number;
     timestamp: number;
+    turnNumber: number;
     // status: 'waiting' | 'active' | 'finished';
 };
 

@@ -150,6 +150,7 @@ class OnlineGameService {
             gameTime: 0,
             turnTime: duration,
             timestamp: Date.now(),
+            turnNumber: 1,
         };
         await this.publishGameState(gameId, initialGameState);
         return gameId;
@@ -270,6 +271,7 @@ class OnlineGameService {
             gameTime: 0,
             turnTime: matchData.duration,
             timestamp: Date.now(),
+            turnNumber: 1,
         };
         // The player receiving MATCH_FOUND is the Joiner, who is always Player 2
         this.onMatchFoundCallback(matchData.gameId, 2, initialState);
@@ -307,6 +309,7 @@ class OnlineGameService {
             gameTime: 0,
             turnTime: request.duration,
             timestamp: Date.now(),
+            turnNumber: 1,
         };
         this.publishGameState(gameId, initialState);
         // We are Player 1, so we call our callback with playerId: 1

@@ -55,6 +55,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
 }) => {
   const currentPlayerColor = players[currentPlayerId]?.color;
   const isPointerDown = useRef(false);
+  const boardRef = useRef<HTMLDivElement>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!isPlacingWall) return;
@@ -64,18 +65,41 @@ const GameBoard: React.FC<GameBoardProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    isPointerDown.current = false;
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    if (isPointerDown.current) {
+        isPointerDown.current = false;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  const handleBoardClick = (e: React.MouseEvent) => {
+      // This handler is for pawn movement clicks only.
+      if (isPlacingWall || !boardRef.current || validMoves.length === 0) return;
+
+      const board = boardRef.current.getBoundingClientRect();
+      const x = e.clientX - board.left;
+      const y = e.clientY - board.top;
+
+      const totalCellSize = board.width / BOARD_SIZE;
+      
+      const c = Math.floor(x / totalCellSize);
+      const r = Math.floor(y / totalCellSize);
+      
+      if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) return;
+
+      const isMoveValid = validMoves.some(move => move.r === r && move.c === c);
+      if (isMoveValid) {
+          onCellClick({ r, c });
+      }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isPlacingWall || !isPointerDown.current || boardPixelSize === 0) return;
+    if (!isPlacingWall || !isPointerDown.current || !boardRef.current) return;
     
-    const board = e.currentTarget.getBoundingClientRect();
+    const board = boardRef.current.getBoundingClientRect();
     const x = e.clientX - board.left;
     const y = e.clientY - board.top;
 
-    const cellSize = (boardPixelSize - (BOARD_SIZE - 1) * GRID_GAP) / BOARD_SIZE;
+    const cellSize = (board.width - (BOARD_SIZE - 1) * GRID_GAP) / BOARD_SIZE;
     const totalBlockSize = cellSize + GRID_GAP;
 
     const row = Math.floor(y / totalBlockSize);
@@ -147,8 +171,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
     const cellClasses = [
       'relative aspect-square rounded-sm transition-colors duration-300',
-      'bg-black/10 hover:bg-white/10',
-      isValidMove ? 'cursor-pointer' : '',
+      'bg-black/10',
+       !isPlacingWall && isValidMove ? 'cursor-pointer hover:bg-white/10' : '',
     ].join(' ');
 
     const playerPiece = (player: Player, isSelectedFlag: boolean) => (
@@ -175,12 +199,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
         key={`cell-${r}-${c}`}
         className={cellClasses}
         style={goalStyle}
-        onClick={() => {
-          if (isPlacingWall) return;
-          if (isValidMove) {
-            onCellClick({ r, c });
-          }
-        }}
         aria-label={`Cell ${r}, ${c}`}
       >
         {isPlayer1Here && playerPiece(players[1], isSelected && 1 === currentPlayerId)}
@@ -261,6 +279,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   return (
     <div className="w-full h-full p-2 bg-black/20 rounded-2xl shadow-lg border border-purple-500/30">
       <div
+        ref={boardRef}
         className="relative grid h-full w-full border-2 border-purple-500/40 rounded-lg touch-none"
         style={{
           gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
@@ -269,6 +288,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           background: 'radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, rgba(0,0,0,0) 70%)',
           boxShadow: '0 0 10px rgba(192, 38, 211, 0.3), inset 0 0 10px rgba(192, 38, 211, 0.2)',
         }}
+        onClick={handleBoardClick}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
